@@ -1,16 +1,12 @@
 # trigger_auto
 
-there need to be a project structure of:
 project-root/
-├─ orchestrator.ps1
-├─ tasks.json
+├─ orchestrator.ps1          # Main automation controller
+├─ tasks.json                # Declarative list of tasks to execute
 ├─ scripts/
-│  ├─ powershell/
-│  ├─ cmd/
-│  └─ python/
-├─ bin/
-│  ├─ m.exe
-│  ├─ scanner.exe
-│  └─ helper.exe
-├─ logs/
-└─ config/
+│  ├─ powershell/            # PowerShell scripts (.ps1)
+│  ├─ cmd/                   # CMD/BAT scripts (.cmd/.bat)
+│  └─ python/                # Python scripts (.py)
+├─ bin/                      # External executables (.exe)
+├─ logs/                     # Execution logs per run
+└─ config/                   # Configuration files, inputs, etc.
