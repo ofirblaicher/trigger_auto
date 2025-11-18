@@ -1,4 +1,4 @@
-# trigger_auto
+##auto trigger##
 
 project-root/
 ├─ orchestrator.ps1          # Main automation controller
