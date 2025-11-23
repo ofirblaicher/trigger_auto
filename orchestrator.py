@@ -1,3 +1,16 @@
+#!/usr/bin/env python3
+"""
+Generic orchestrator for the trigger_auto project.
+
+Place this file in the root trigger_auto directory:
+trigger_auto/
+  bin/
+  scripts/
+    cmd/
+    powershell/
+    python/
+  orchestrator.py  <-- here
+"""
 
 import os
 import sys
@@ -20,6 +33,8 @@ ONE_LINERS_NAME = "one_liners.ps1"   # filename inside scripts/powershell
 
 # Change this if your PowerShell executable is named differently (e.g. "pwsh")
 POWERSHELL_EXE = "powershell.exe"
+
+VT_PY_SCRIPT_NAME = "vt_file_iocs.py"  # special label for this script
 
 # ---------------------------------------------------------------------------
 # Job helpers
@@ -112,7 +127,18 @@ def build_python_jobs(jobs):
 
     print(f"\n=== Preparing Python scripts in {PYTHON_DIR} ===")
     for f in sorted(PYTHON_DIR.glob("*.py")):
-        add_job(jobs, f"python/{f.name}", [sys.executable, str(f)], PYTHON_DIR)
+        # Special label for the VT IoC script so it’s obvious in logs
+        if f.name == VT_PY_SCRIPT_NAME:
+            job_name = f"python/VT_IoCs({f.name})"
+            print("\n=== Detected VirusTotal IoC script ===")
+            print(f"    Script : {f}")
+            print("    Note   : Will use hashes.txt next to vt_file_iocs.py "
+                  "and VT_API_KEY from environment.")
+            print("=======================================")
+        else:
+            job_name = f"python/{f.name}"
+
+        add_job(jobs, job_name, [sys.executable, str(f)], PYTHON_DIR)
 
 
 def build_cmd_jobs(jobs):
@@ -222,8 +248,6 @@ def run_one_liners():
 
             name = f"one_liner line {idx}"
             print(f"\n[Line {idx}] {stripped}")
-            # Optional pause:
-            # input("Press Enter to run this line, or Ctrl+C to stop...")
 
             job = {
                 "name": name,
@@ -296,4 +320,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
