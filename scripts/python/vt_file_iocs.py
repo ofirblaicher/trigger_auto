@@ -14,7 +14,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 def get_api_key():
-    api_key = os.getenv("VT_API_KEY")
+    api_key = os.getenv("c908c6627422663c4f0d9de954881dc6146388ed3ac61b6c6bf8b51872a5cbf8")
     if not api_key:
         print("[!] Please set the VT_API_KEY environment variable to your VirusTotal API key.")
         sys.exit(1)
