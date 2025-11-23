@@ -1,7 +1,22 @@
+#!/usr/bin/env python3
+"""
+Generic orchestrator for the trigger_auto project.
+
+Place this file in the root trigger_auto directory:
+trigger_auto/
+  bin/
+  scripts/
+    cmd/
+    powershell/
+    python/
+  orchestrator.py  <-- here
+"""
+
 import os
 import sys
 import subprocess
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -20,12 +35,26 @@ ONE_LINERS_NAME = "one_liners.ps1"   # filename inside scripts/powershell
 POWERSHELL_EXE = "powershell.exe"
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Job helpers
 # ---------------------------------------------------------------------------
 
-def run_process(cmd, cwd=None):
-    """Run a subprocess and stream output."""
-    print(f"\n[+] Running: {cmd}")
+def add_job(jobs, name, cmd, cwd):
+    """Add a job description to the list."""
+    jobs.append({
+        "name": name,
+        "cmd": cmd,
+        "cwd": cwd,
+    })
+
+
+def run_single_job(job):
+    """Run one job and return a result dict."""
+    name = job["name"]
+    cmd = job["cmd"]
+    cwd = job["cwd"]
+
+    print(f"\n[+] Starting job: {name}")
+    print(f"    Command: {cmd}")
     try:
         result = subprocess.run(
             cmd,
@@ -33,69 +62,155 @@ def run_process(cmd, cwd=None):
             check=False,
             text=True
         )
-        print(f"[+] Process exited with code {result.returncode}")
+        rc = result.returncode
+        print(f"[+] Job finished: {name} (exit code {rc})")
+        return {"name": name, "returncode": rc, "error": None}
     except FileNotFoundError:
-        print(f"[!] Command not found: {cmd[0]}")
+        msg = f"Command not found: {cmd[0]}"
+        print(f"[!] {msg}")
+        return {"name": name, "returncode": None, "error": msg}
     except Exception as e:
-        print(f"[!] Error running {cmd}: {e}")
+        msg = f"Error running job: {e}"
+        print(f"[!] {msg}")
+        return {"name": name, "returncode": None, "error": msg}
 
 
-def run_bin_folder():
-    """Run every executable file inside bin/."""
+def run_jobs_in_parallel(jobs, max_workers=None):
+    """Run all jobs in parallel and return list of result dicts."""
+    if not jobs:
+        return []
+
+    if max_workers is None:
+        max_workers = min(8, max(1, len(jobs)))
+
+    print(f"\n=== Running {len(jobs)} jobs in parallel "
+          f"(max_workers={max_workers}) ===")
+
+    results = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_job = {
+            executor.submit(run_single_job, job): job for job in jobs
+        }
+        for future in as_completed(future_to_job):
+            res = future.result()
+            results.append(res)
+
+    return results
+
+# ---------------------------------------------------------------------------
+# Job builders
+# ---------------------------------------------------------------------------
+
+def build_bin_jobs(jobs):
+    """Create jobs for every executable file inside bin/."""
     if not BIN_DIR.exists():
         print(f"[!] BIN directory not found: {BIN_DIR}")
         return
 
-    print(f"\n=== Running executables in {BIN_DIR} ===")
+    print(f"\n=== Preparing executables in {BIN_DIR} ===")
     for f in sorted(BIN_DIR.iterdir()):
         if f.is_file() and os.access(f, os.X_OK):
-            run_process([str(f)], cwd=BIN_DIR)
+            add_job(jobs, f"bin/{f.name}", [str(f)], BIN_DIR)
         else:
             # On Windows, .exe/.bat may not always have +x bit set
             if f.suffix.lower() in (".exe", ".bat", ".cmd"):
-                run_process([str(f)], cwd=BIN_DIR)
+                add_job(jobs, f"bin/{f.name}", [str(f)], BIN_DIR)
 
 
-def run_python_scripts():
-    """Run every .py file inside scripts/python/."""
+def build_python_jobs(jobs):
+    """Create jobs for every .py file inside scripts/python/."""
     if not PYTHON_DIR.exists():
         print(f"[!] Python scripts directory not found: {PYTHON_DIR}")
         return
 
-    print(f"\n=== Running Python scripts in {PYTHON_DIR} ===")
+    print(f"\n=== Preparing Python scripts in {PYTHON_DIR} ===")
     for f in sorted(PYTHON_DIR.glob("*.py")):
-        run_process([sys.executable, str(f)], cwd=PYTHON_DIR)
+        add_job(jobs, f"python/{f.name}", [sys.executable, str(f)], PYTHON_DIR)
 
 
-def run_cmd_scripts():
-    """Run every .bat/.cmd file inside scripts/cmd/."""
+def build_cmd_jobs(jobs):
+    """Create jobs for every .bat/.cmd file inside scripts/cmd/."""
     if not CMD_DIR.exists():
         print(f"[!] CMD scripts directory not found: {CMD_DIR}")
         return
 
-    print(f"\n=== Running CMD scripts in {CMD_DIR} ===")
+    print(f"\n=== Preparing CMD scripts in {CMD_DIR} ===")
     for f in sorted(CMD_DIR.iterdir()):
         if f.suffix.lower() in (".bat", ".cmd"):
-            run_process(["cmd.exe", "/c", str(f)], cwd=CMD_DIR)
+            add_job(
+                jobs,
+                f"cmd/{f.name}",
+                ["cmd.exe", "/c", str(f)],
+                CMD_DIR
+            )
 
 
-def run_powershell_scripts():
-    """Run every .ps1 file inside scripts/powershell/ EXCEPT one_liners.ps1."""
+def build_powershell_script_jobs(jobs):
+    """Create jobs for every .ps1 inside scripts/powershell/ (except one_liners)."""
     if not POWERSHELL_DIR.exists():
         print(f"[!] PowerShell scripts directory not found: {POWERSHELL_DIR}")
         return
 
-    print(f"\n=== Running PowerShell scripts in {POWERSHELL_DIR} ===")
+    print(f"\n=== Preparing PowerShell scripts in {POWERSHELL_DIR} ===")
     for f in sorted(POWERSHELL_DIR.glob("*.ps1")):
         if f.name == ONE_LINERS_NAME:
             continue  # handled separately
-        run_process([
-            POWERSHELL_EXE,
-            "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
-            "-File", str(f)
-        ], cwd=POWERSHELL_DIR)
+        add_job(
+            jobs,
+            f"ps1/{f.name}",
+            [
+                POWERSHELL_EXE,
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", str(f),
+            ],
+            POWERSHELL_DIR
+        )
 
+
+def build_powershell_module_jobs(jobs):
+    """
+    Create jobs for every .psm1 inside scripts/powershell/.
+    For each module X.psm1 we:
+      - Import-Module X.psm1
+      - If a function named 'X' exists, call it.
+    """
+    if not POWERSHELL_DIR.exists():
+        print(f"[!] PowerShell modules directory not found: {POWERSHELL_DIR}")
+        return
+
+    print(f"\n=== Preparing PowerShell modules in {POWERSHELL_DIR} ===")
+    for f in sorted(POWERSHELL_DIR.glob("*.psm1")):
+        module_path = str(f)
+        escaped_path = module_path.replace("'", "''")
+        entry_name = f.stem  # e.g. Mayhem.psm1 -> Mayhem
+
+        ps_command = (
+            f"$modulePath = '{escaped_path}';"
+            "$ErrorActionPreference = 'Stop';"
+            "Import-Module $modulePath;"
+            f"$entry = '{entry_name}';"
+            "if (Get-Command $entry -ErrorAction SilentlyContinue) "
+            "{ & $entry } "
+            "else "
+            "{ Write-Host \"Module imported but no entry function named $entry was found.\" }"
+        )
+
+        add_job(
+            jobs,
+            f"psm1/{f.name}",
+            [
+                POWERSHELL_EXE,
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-Command", ps_command,
+            ],
+            POWERSHELL_DIR
+        )
+
+# ---------------------------------------------------------------------------
+# one_liners.ps1 (sequential, line-by-line)
+# ---------------------------------------------------------------------------
 
 def run_one_liners():
     """
@@ -105,28 +220,64 @@ def run_one_liners():
     running this script so the commands execute with elevated permissions.
     """
     one_liners = POWERSHELL_DIR / ONE_LINERS_NAME
+    results = []
+
     if not one_liners.exists():
         print(f"[!] One-liners file not found: {one_liners}")
-        return
+        return results
 
-    print(f"\n=== Running one-liners from {one_liners} ===")
+    print(f"\n=== Running one-liners from {one_liners} (sequential) ===")
     with one_liners.open(encoding="utf-8", errors="ignore") as fh:
         for idx, line in enumerate(fh, start=1):
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue  # skip blank lines and comments
 
+            name = f"one_liner line {idx}"
             print(f"\n[Line {idx}] {stripped}")
-            # Optionally pause between lines:
+            # Optional pause:
             # input("Press Enter to run this line, or Ctrl+C to stop...")
 
-            run_process([
-                POWERSHELL_EXE,
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-Command", stripped
-            ], cwd=POWERSHELL_DIR)
+            job = {
+                "name": name,
+                "cmd": [
+                    POWERSHELL_EXE,
+                    "-NoProfile",
+                    "-ExecutionPolicy", "Bypass",
+                    "-Command", stripped,
+                ],
+                "cwd": POWERSHELL_DIR,
+            }
+            res = run_single_job(job)
+            results.append(res)
 
+    return results
+
+# ---------------------------------------------------------------------------
+# Summary reporting
+# ---------------------------------------------------------------------------
+
+def print_summary(results, title="Summary"):
+    print(f"\n=== {title} ===")
+    if not results:
+        print("No jobs were run.")
+        return
+
+    successes = [r for r in results if r["returncode"] == 0]
+    failures = [r for r in results if r["returncode"] not in (0, None)]
+    errors   = [r for r in results if r["returncode"] is None and r["error"]]
+
+    for r in results:
+        status = "OK" if r["returncode"] == 0 else "FAIL"
+        if r["returncode"] is None and r["error"]:
+            status = "ERROR"
+        print(f"- {r['name']}: {status} "
+              f"(code={r['returncode']}, error={r['error']})")
+
+    print(f"\nTotal jobs   : {len(results)}")
+    print(f"Successes    : {len(successes)}")
+    print(f"Failures     : {len(failures)}")
+    print(f"Errors       : {len(errors)}")
 
 # ---------------------------------------------------------------------------
 # Main
@@ -136,12 +287,23 @@ def main():
     print("=== Trigger Auto Orchestrator (Python) ===")
     print(f"Root directory: {ROOT_DIR}")
 
-    # Order of execution – adjust to whatever sequence you want:
-    ##run_bin_folder()
-    run_python_scripts()
-    ##run_cmd_scripts()
-    run_powershell_scripts()
-    run_one_liners()
+    # Build all jobs that can be parallelized
+    jobs = []
+    build_bin_jobs(jobs)
+    build_python_jobs(jobs)
+    build_cmd_jobs(jobs)
+    build_powershell_script_jobs(jobs)
+    build_powershell_module_jobs(jobs)
+
+    # Run those jobs in parallel
+    parallel_results = run_jobs_in_parallel(jobs)
+
+    # Run one_liners.ps1 sequentially, line-by-line
+    one_liner_results = run_one_liners()
+
+    # Combined summary
+    all_results = parallel_results + one_liner_results
+    print_summary(all_results, title="Per-script Success/Failure Summary")
 
     print("\n=== Orchestration complete ===")
 
