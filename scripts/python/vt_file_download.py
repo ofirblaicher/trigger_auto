@@ -174,7 +174,7 @@ def main() -> int:
     script_directory = Path(__file__).resolve().parent
     output_directory = script_directory / "vt_samples"
 
-    api_key = os.environ.get("VT_API_KEY", "").strip()
+    api_key = "c908c6627422663c4f0d9de954881dc6146388ed3ac61b6c6bf8b51872a5cbf8"
     if not api_key:
         print("[!] VT_API_KEY is not set. Aborting.")
         return 1
