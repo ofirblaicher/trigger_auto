@@ -1,16 +1,3 @@
-#!/usr/bin/env python3
-"""
-Generic orchestrator for the trigger_auto project.
-
-Place this file in the root trigger_auto directory:
-trigger_auto/
-  bin/
-  scripts/
-    cmd/
-    powershell/
-    python/
-  orchestrator.py  <-- here
-"""
 
 import os
 import sys
@@ -309,3 +296,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
