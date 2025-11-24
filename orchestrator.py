@@ -104,19 +104,20 @@ def run_jobs_in_parallel(jobs, max_workers=None):
 # ---------------------------------------------------------------------------
 
 def build_bin_jobs(jobs):
-    """Create jobs for every executable file inside bin/."""
+    """Create jobs for every Windows executable file inside bin/."""
     if not BIN_DIR.exists():
         print(f"[!] BIN directory not found: {BIN_DIR}")
         return
 
     print(f"\n=== Preparing executables in {BIN_DIR} ===")
     for f in sorted(BIN_DIR.iterdir()):
-        if f.is_file() and os.access(f, os.X_OK):
+        if not f.is_file():
+            continue
+
+        if f.suffix.lower() in (".exe", ".bat", ".cmd"):
             add_job(jobs, f"bin/{f.name}", [str(f)], BIN_DIR)
         else:
-            # On Windows, .exe/.bat may not always have +x bit set
-            if f.suffix.lower() in (".exe", ".bat", ".cmd"):
-                add_job(jobs, f"bin/{f.name}", [str(f)], BIN_DIR)
+            print(f"[i] Skipping non-executable file: {f.name}")
 
 
 def build_python_jobs(jobs):
@@ -321,3 +322,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
