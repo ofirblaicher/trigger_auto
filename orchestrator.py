@@ -15,8 +15,9 @@ trigger_auto/
 import os
 import sys
 import subprocess
+import time  # <-- added
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
+# from concurrent.futures import ThreadPoolExecutor, as_completed  # <-- no longer needed
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -35,6 +36,9 @@ ONE_LINERS_NAME = "one_liners.ps1"   # filename inside scripts/powershell
 POWERSHELL_EXE = "powershell.exe"
 
 VT_PY_SCRIPT_NAME = "vt_file_iocs.py"  # special label for this script
+
+# Delay between jobs (in seconds): 1 minute 30 seconds
+JOB_DELAY_SECONDS = 90
 
 # ---------------------------------------------------------------------------
 # Job helpers
@@ -77,25 +81,30 @@ def run_single_job(job):
         return {"name": name, "returncode": None, "error": msg}
 
 
-def run_jobs_in_parallel(jobs, max_workers=None):
-    """Run all jobs in parallel and return list of result dicts."""
+def run_jobs_with_delay(jobs, delay_seconds=JOB_DELAY_SECONDS):
+    """
+    Run all jobs sequentially with a delay between each job.
+    """
     if not jobs:
         return []
 
-    if max_workers is None:
-        max_workers = min(8, max(1, len(jobs)))
-
-    print(f"\n=== Running {len(jobs)} jobs in parallel "
-          f"(max_workers={max_workers}) ===")
+    print(f"\n=== Running {len(jobs)} jobs sequentially "
+          f"with {delay_seconds} seconds delay between each ===")
 
     results = []
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_job = {
-            executor.submit(run_single_job, job): job for job in jobs
-        }
-        for future in as_completed(future_to_job):
-            res = future.result()
-            results.append(res)
+    for idx, job in enumerate(jobs, start=1):
+        print(f"\n=== Job {idx}/{len(jobs)} ===")
+        res = run_single_job(job)
+        results.append(res)
+
+        # If this is not the last job, wait before starting the next one
+        if idx < len(jobs):
+            print(f"[*] Waiting {delay_seconds} seconds before next job...")
+            try:
+                time.sleep(delay_seconds)
+            except KeyboardInterrupt:
+                print("[!] Sleep interrupted by user. Continuing to next job.")
+                # you can choose to break here instead if you want to stop
 
     return results
 
@@ -300,7 +309,7 @@ def main():
     print("=== Trigger Auto Orchestrator (Python) ===")
     print(f"Root directory: {ROOT_DIR}")
 
-    # Build all jobs that can be parallelized
+    # Build all jobs that can be time-lapsed
     jobs = []
     build_bin_jobs(jobs)
     build_python_jobs(jobs)
@@ -308,18 +317,17 @@ def main():
     build_powershell_script_jobs(jobs)
     build_powershell_module_jobs(jobs)
 
-    # Run those jobs in parallel
-    parallel_results = run_jobs_in_parallel(jobs)
+    # Run those jobs sequentially with delay
+    time_lapse_results = run_jobs_with_delay(jobs, delay_seconds=JOB_DELAY_SECONDS)
 
     # Run one_liners.ps1 sequentially, line-by-line
     one_liner_results = run_one_liners()
 
     # Combined summary
-    all_results = parallel_results + one_liner_results
+    all_results = time_lapse_results + one_liner_results
     print_summary(all_results, title="Per-script Success/Failure Summary")
 
     print("\n=== Orchestration complete ===")
 
 if __name__ == "__main__":
     main()
-
