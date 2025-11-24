@@ -29,15 +29,11 @@ hash_file_path = Path("/Users/ofirblaicher/Documents/GitHub/trigger_auto/bin/has
 # =========================
 
 def make_safe_filename(name: str) -> str:
-    safe_chars = "-_.()"
-    result = []
-    for ch in name:
-        if ch.isalnum() or ch in safe_chars:
-            result.append(ch)
-        else:
-            result.append("_")
-    safe = "".join(result)
-    return safe or "file"
+    """
+    Keep the provided name as-is (intended to be a hash from the txt file).
+    Fallback to 'file' only if it's empty.
+    """
+    return name or "file"
 
 
 def load_items(path: Path) -> List[str]:
@@ -101,18 +97,14 @@ def download_single_sample(
             short_body = "<unable to read body>"
         return False, f"Unexpected HTTP {status}: {short_body}"
 
-    # Decide filename from headers/hash
-    sha256_header = None
-    for header_name in SHA256_HEADER_CANDIDATES:
-        if header_name in response.headers:
-            sha256_header = response.headers[header_name]
-            break
+    # Decide filename: ALWAYS use the hash from the txt file
+    safe_name = make_safe_filename(file_hash)
 
-    if not sha256_header:
-        sha256_header = file_hash
+    # Each sample gets its own directory under output_directory
+    sample_dir = output_directory / safe_name
+    sample_dir.mkdir(parents=True, exist_ok=True)
 
-    safe_name = make_safe_filename(sha256_header)
-    output_path = output_directory / f"{safe_name}.bin"
+    output_path = sample_dir / f"{safe_name}.bin"
 
     # Optional per-file progress bar
     total_bytes = None
@@ -171,8 +163,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     print("=== VT Enterprise Sample Downloader ===")
 
+    # Save downloads into the project root /bin directory
     script_directory = Path(__file__).resolve().parent
-    output_directory = script_directory / "vt_samples"
+    # scripts/python → scripts → trigger_auto (project root)
+    project_root = script_directory.parent.parent
+    output_directory = project_root / "bin"
 
     api_key = "c908c6627422663c4f0d9de954881dc6146388ed3ac61b6c6bf8b51872a5cbf8"
     if not api_key:
@@ -194,6 +189,7 @@ def main() -> int:
         print("[!] No hashes found. Ensure file exists and is not empty.")
         return 1
 
+    # Ensure base output directory exists (per-hash subdirs created in download_single_sample)
     output_directory.mkdir(parents=True, exist_ok=True)
 
     success = 0
