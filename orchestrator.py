@@ -132,8 +132,9 @@ def build_python_jobs(jobs):
             job_name = f"python/VT_IoCs({f.name})"
             print("\n=== Detected VirusTotal IoC script ===")
             print(f"    Script : {f}")
-            print("    Note   : Will use hashes.txt next to vt_file_iocs.py "
-                  "and VT_API_KEY from environment.")
+            # *** UPDATED NOTE ***
+            print("    Note   : VT hash file is expected at bin/hashes.txt "
+                  "under the project root. VT_API_KEY is expected from the environment.")
             print("=======================================")
         else:
             job_name = f"python/{f.name}"
