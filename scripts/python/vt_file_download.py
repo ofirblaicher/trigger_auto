@@ -24,11 +24,6 @@ SHA256_HEADER_CANDIDATES = [
     "x-vt-file-sha256",
 ]
 
-
-# Hard-coded default path for the hash file
-hash_file_path = Path("trigger_auto/bin/hashes.txt")
-
-
 # =========================
 # HELPER FUNCTIONS
 # =========================
