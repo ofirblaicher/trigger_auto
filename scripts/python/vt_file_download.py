@@ -21,7 +21,7 @@ SHA256_HEADER_CANDIDATES = [
 ]
 
 # Hard-coded default path for the hash file
-hash_file_path = Path("/Users/ofirblaicher/Documents/GitHub/trigger_auto/bin/hashes.txt")
+hash_file_path = Path("trigger_auto/bin/hashes.txt")
 
 
 # =========================
@@ -104,7 +104,8 @@ def download_single_sample(
     sample_dir = output_directory / safe_name
     sample_dir.mkdir(parents=True, exist_ok=True)
 
-    output_path = sample_dir / f"{safe_name}.bin"
+    # CHANGE → save as .exe instead of .bin
+    output_path = sample_dir / f"{safe_name}.exe"
 
     # Optional per-file progress bar
     total_bytes = None
