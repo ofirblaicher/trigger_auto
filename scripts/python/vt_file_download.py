@@ -9,8 +9,12 @@ import requests
 from tqdm import tqdm  # NEW
 
 # =========================
-# CONFIG CONSTANTS
+# PATHS & CONFIG
 # =========================
+
+SCRIPT_DIR = Path(__file__).resolve().parent          # .../trigger_auto/scripts/python
+PROJECT_ROOT = SCRIPT_DIR.parents[2]                  # .../trigger_auto
+hash_file_path = PROJECT_ROOT / "bin" / "hashes.txt"  # .../trigger_auto/bin/hashes.txt
 
 VT_DOWNLOAD_BASE_URL = "https://www.virustotal.com/api/v3/files"
 VT_API_KEY_HEADER_NAME = "x-apikey"
@@ -19,6 +23,7 @@ SHA256_HEADER_CANDIDATES = [
     "x-vt-hash",
     "x-vt-file-sha256",
 ]
+
 
 # Hard-coded default path for the hash file
 hash_file_path = Path("trigger_auto/bin/hashes.txt")
